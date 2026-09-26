@@ -1,0 +1,10 @@
+const router = require('express').Router(); const { protect } = require('../middleware/auth'); const auth = require('../controllers/authController'); const house = require('../controllers/houseController'); const feature = require('../controllers/featureController');
+router.post('/auth/register', auth.register); router.post('/auth/login', auth.login); router.post('/auth/logout', (req, res) => res.json({ message: 'Logged out.' })); router.get('/auth/me', protect, auth.me);
+router.use(protect);
+router.post('/houses', house.create); router.post('/houses/join', house.join); router.get('/houses/current', house.current); router.get('/houses/:id/members', house.members); router.put('/houses/current', house.update); router.delete('/houses/current/leave', house.leave);
+router.route('/expenses').get(feature.listExpenses).post(feature.addExpense); router.route('/expenses/:id').put(feature.updateExpense).delete(feature.deleteExpense);
+router.route('/rent').get(feature.getRent).post(feature.saveRent); router.put('/rent/:id', feature.updateRent);
+router.get('/settlements', feature.settlements); router.put('/settlements/:id', feature.paySettlement);
+router.route('/:feature(maintenance|chores)').get(feature.listFeature).post(feature.addFeature); router.put('/:feature(maintenance|chores)/:id', feature.updateFeature);
+router.get('/notifications', feature.notifications); router.put('/notifications/:id/read', feature.readNotification); router.get('/dashboard', feature.dashboard);
+module.exports = router;
