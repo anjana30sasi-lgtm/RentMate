@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Shared rental and expense management system",
   "main": "server.js",
-  "scripts": { "start": "node server.js", "dev": "nodemon server.js" },
+  "scripts": { "start": "node server.js", "dev": "nodemon server.js", "repair:settlements": "node server/scripts/repairLegacySettlements.js" },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "dotenv": "^16.4.7",
