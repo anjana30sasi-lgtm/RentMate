@@ -1,4 +1,4 @@
-const Expense = require('../models/Expense'); const RentPayment = require('../models/RentPayment'); const Maintenance = require('../models/MaintenanceRequest'); const Chore = require('../models/Chore'); const Settlement = require('../models/Settlement'); const Notification = require('../models/Notification'); const { getHouse, isAdmin, notifyUsers } = require('./helpers');
+const Expense = require('../models/Expense'); const RentPayment = require('../models/RentPayment'); const Maintenance = require('../models/MaintenanceRequest'); const Chore = require('../models/Chore'); const Settlement = require('../models/Settlement'); const Notification = require('../models/Notification'); const PantryItem = require('../models/PantryItem'); const { getHouse, isAdmin, notifyUsers } = require('./helpers');
 const modelFor = { maintenance: Maintenance, chores: Chore };
 const populateExpenses = (query) => query.populate('paidBy splitBetween', 'name email');
 const populateFeature = (query, feature) => feature === 'maintenance'
@@ -33,4 +33,27 @@ exports.settlements = async (req, res) => { const house = await getHouse(req.use
 exports.paySettlement = async (req, res) => { const settlement = await Settlement.findById(req.params.id); if (!settlement || settlement.from.toString() !== req.userId) return res.status(403).json({ message: 'Only the person who owes can mark this paid.' }); settlement.status = 'Paid'; await settlement.save(); res.json(settlement); };
 exports.notifications = async (req, res) => res.json(await Notification.find({ user: req.userId }).sort('-createdAt').limit(30));
 exports.readNotification = async (req, res) => { const notification = await Notification.findOneAndUpdate({ _id: req.params.id, user: req.userId }, { read: true }, { new: true }); res.json(notification); };
-exports.dashboard = async (req, res) => { const house = await getHouse(req.userId); if (!house) return res.json({ house: null }); const [expenses, settlements, maintenance, chores] = await Promise.all([Expense.find({ house: house._id }).sort('-date').limit(5).populate('paidBy', 'name'), Settlement.find({ house: house._id, status: 'Pending', $expr: { $ne: ['$from', '$to'] }, $or: [{ from: req.userId }, { to: req.userId }] }).populate('from to', 'name'), Maintenance.countDocuments({ house: house._id, status: { $ne: 'Resolved' } }), Chore.findOne({ house: house._id, assignedTo: req.userId, status: 'Pending' })]); const owes = settlements.filter((item) => item.from._id.toString() === req.userId).reduce((sum, item) => sum + item.amount, 0); const receives = settlements.filter((item) => item.to._id.toString() === req.userId).reduce((sum, item) => sum + item.amount, 0); res.json({ house, expenses, owes, receives, maintenance, chore: chores }); };
+exports.dashboard = async (req, res) => {
+  const house = await getHouse(req.userId);
+  if (!house) return res.json({ house: null });
+  const [expenses, settlements, maintenance, chores, pantryItems] = await Promise.all([
+    Expense.find({ house: house._id }).sort('-date').limit(5).populate('paidBy', 'name'),
+    Settlement.find({ house: house._id, status: 'Pending', $expr: { $ne: ['$from', '$to'] }, $or: [{ from: req.userId }, { to: req.userId }] }).populate('from to', 'name'),
+    Maintenance.countDocuments({ house: house._id, status: { $ne: 'Resolved' } }),
+    Chore.findOne({ house: house._id, assignedTo: req.userId, status: { $in: ['Pending', 'Overdue'] } }).sort('dueDate'),
+    PantryItem.find({ house: house._id })
+  ]);
+  const owes = settlements.filter((item) => item.from._id.toString() === req.userId).reduce((sum, item) => sum + item.amount, 0);
+  const receives = settlements.filter((item) => item.to._id.toString() === req.userId).reduce((sum, item) => sum + item.amount, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const soon = new Date(today);
+  soon.setDate(soon.getDate() + 7);
+  const pantry = {
+    total: pantryItems.length,
+    lowStock: pantryItems.filter((i) => i.quantity < i.lowStockThreshold && i.quantity > 0).length,
+    outOfStock: pantryItems.filter((i) => i.quantity === 0).length,
+    expiringSoon: pantryItems.filter((i) => (i.expiryDate && new Date(i.expiryDate) <= soon) || Boolean(i.expiryDate && new Date(i.expiryDate) < today)).length
+  };
+  res.json({ house, expenses, owes, receives, maintenance, chore: chores, pantry });
+};
